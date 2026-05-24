@@ -1,0 +1,50 @@
+# macOS
+.DS_Store
+
+# Xcode user data
+**/xcuserdata/
+**/xcshareddata/IDEWorkspaceChecks.plist
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+
+# Build artifacts
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.app
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Code Injection
+iOSInjectionProject/
+
+# Backup files
+*~.nib
+*.orig
+*~
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.pbxuser
+*.moved-aside
