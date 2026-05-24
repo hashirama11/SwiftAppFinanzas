@@ -23,6 +23,7 @@ struct AddTransactionView: View {
         .navigationTitle(transactionId == nil ? "Nueva Transacción" : "Editar Transacción")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
+        .enableBackGesture()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: onBack) {
@@ -183,7 +184,7 @@ struct AddTransactionView: View {
                 Divider()
                     .padding(.leading, 16)
 
-                TextField("Descripción", text: Binding(
+                TextField("Descripción (opcional)", text: Binding(
                     get: { vm.state.description },
                     set: { vm.onDescriptionChange($0) }
                 ))

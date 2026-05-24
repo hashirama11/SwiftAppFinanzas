@@ -8,11 +8,15 @@ struct CategoryManagementView: View {
     let onBack: () -> Void
 
     @State private var viewModel: CategoryManagementViewModel?
-    @State private var showAddDialog: Bool = false
+    @State private var showSheet: Bool = false
+    @State private var editingCategory: Categoria?
 
-    @State private var newCategoryName: String = ""
-    @State private var newCategoryType: TipoTransaccion = .gasto
-    @State private var newCategoryIcon: IconosEstandar = .otros
+    @State private var categoryName: String = ""
+    @State private var categoryType: TipoTransaccion = .gasto
+    @State private var categoryIcon: IconosEstandar = .otros
+
+    @State private var showDeleteConfirmation: Bool = false
+    @State private var categoryToDelete: Categoria?
 
     var body: some View {
         Group {
@@ -26,6 +30,7 @@ struct CategoryManagementView: View {
         .navigationTitle("Mis Categorías")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
+        .enableBackGesture()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: onBack) {
@@ -37,8 +42,21 @@ struct CategoryManagementView: View {
                 }
             }
         }
-        .sheet(isPresented: $showAddDialog) {
-            addCategorySheet
+        .sheet(isPresented: $showSheet) {
+            categoryFormSheet
+        }
+        .alert("Eliminar Categoría", isPresented: $showDeleteConfirmation) {
+            Button("Cancelar", role: .cancel) { categoryToDelete = nil }
+            Button("Eliminar", role: .destructive) {
+                if let cat = categoryToDelete {
+                    Task { await viewModel?.deleteCategory(cat) }
+                }
+                categoryToDelete = nil
+            }
+        } message: {
+            if let cat = categoryToDelete {
+                Text("¿Estás seguro de que deseas eliminar la categoría '\(cat.nombre)'? Las transacciones asociadas no se eliminarán.")
+            }
         }
         .task {
             await setupViewModel()
@@ -53,33 +71,52 @@ struct CategoryManagementView: View {
             } else {
                 List {
                     ForEach(vm.categories) { categoria in
-                        HStack(spacing: 12) {
-                            Image(systemName: categoria.iconoEnum.sfSymbol)
-                                .font(.system(size: 18))
-                                .foregroundColor(
-                                    categoria.tipoEnum == .ingreso
-                                        ? theme.colors.accentGreen
-                                        : theme.colors.accentRed
-                                )
-                                .frame(width: 32)
+                        Button {
+                            openEditSheet(for: categoria)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: categoria.iconoEnum.sfSymbol)
+                                    .font(.system(size: 18))
+                                    .foregroundColor(
+                                        categoria.tipoEnum == .ingreso
+                                            ? theme.colors.accentGreen
+                                            : theme.colors.accentRed
+                                    )
+                                    .frame(width: 32)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(categoria.nombre)
-                                    .font(theme.typography.bodyLarge)
-                                    .foregroundColor(theme.colors.textPrimary)
-                                Text(categoria.tipoEnum.nombre)
-                                    .font(theme.typography.labelSmall)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(categoria.nombre)
+                                        .font(theme.typography.bodyLarge)
+                                        .foregroundColor(theme.colors.textPrimary)
+                                    Text(categoria.tipoEnum.nombre)
+                                        .font(theme.typography.labelSmall)
+                                        .foregroundColor(theme.colors.textSecondary)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
                                     .foregroundColor(theme.colors.textSecondary)
                             }
-
-                            Spacer()
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
                         }
-                        .padding(.vertical, 4)
-                    }
-                    .onDelete { indexSet in
-                        let idsToDelete = indexSet.map { vm.categories[$0].id }
-                        for id in idsToDelete {
-                            Task { await vm.deleteCategory(by: id) }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                categoryToDelete = categoria
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("Eliminar", systemImage: "trash")
+                            }
+
+                            Button {
+                                openEditSheet(for: categoria)
+                            } label: {
+                                Label("Editar", systemImage: "pencil")
+                            }
+                            .tint(theme.colors.primary)
                         }
                     }
                 }
@@ -109,10 +146,7 @@ struct CategoryManagementView: View {
 
     private var fabButton: some View {
         Button {
-            newCategoryName = ""
-            newCategoryType = .gasto
-            newCategoryIcon = .otros
-            showAddDialog = true
+            openAddSheet()
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 22, weight: .semibold))
@@ -134,15 +168,15 @@ struct CategoryManagementView: View {
         .padding(.bottom, 16)
     }
 
-    private var addCategorySheet: some View {
+    private var categoryFormSheet: some View {
         NavigationStack {
             Form {
                 Section("Nombre") {
-                    TextField("Nombre de la categoría", text: $newCategoryName)
+                    TextField("Nombre de la categoría", text: $categoryName)
                 }
 
                 Section("Tipo") {
-                    Picker("Tipo", selection: $newCategoryType) {
+                    Picker("Tipo", selection: $categoryType) {
                         ForEach(TipoTransaccion.allCases, id: \.self) { tipo in
                             Text(tipo.nombre).tag(tipo)
                         }
@@ -151,7 +185,7 @@ struct CategoryManagementView: View {
                 }
 
                 Section("Icono") {
-                    Picker("Icono", selection: $newCategoryIcon) {
+                    Picker("Icono", selection: $categoryIcon) {
                         ForEach(IconosEstandar.allCases, id: \.self) { icono in
                             HStack {
                                 Image(systemName: icono.sfSymbol)
@@ -167,33 +201,77 @@ struct CategoryManagementView: View {
                 Section {
                     Button {
                         Task {
-                            await viewModel?.addCategory(
-                                name: newCategoryName,
-                                type: newCategoryType,
-                                icon: newCategoryIcon
-                            )
-                            showAddDialog = false
+                            if let editingCat = editingCategory {
+                                await viewModel?.updateCategory(
+                                    editingCat,
+                                    name: categoryName,
+                                    type: categoryType,
+                                    icon: categoryIcon
+                                )
+                            } else {
+                                await viewModel?.addCategory(
+                                    name: categoryName,
+                                    type: categoryType,
+                                    icon: categoryIcon
+                                )
+                            }
+                            showSheet = false
                         }
                     } label: {
                         HStack {
                             Spacer()
-                            Text("Guardar Categoría")
+                            Text(editingCategory == nil ? "Guardar Categoría" : "Actualizar Categoría")
                                 .fontWeight(.semibold)
                             Spacer()
                         }
                     }
-                    .disabled(newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                if editingCategory != nil {
+                    Section {
+                        Button(role: .destructive) {
+                            categoryToDelete = editingCategory
+                            showSheet = false
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                showDeleteConfirmation = true
+                            }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("Eliminar Categoría")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                            }
+                        }
+                    }
                 }
             }
-            .navigationTitle("Nueva Categoría")
+            .navigationTitle(editingCategory == nil ? "Nueva Categoría" : "Editar Categoría")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancelar") { showAddDialog = false }
+                    Button("Cancelar") { showSheet = false }
                 }
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private func openAddSheet() {
+        editingCategory = nil
+        categoryName = ""
+        categoryType = .gasto
+        categoryIcon = .otros
+        showSheet = true
+    }
+
+    private func openEditSheet(for categoria: Categoria) {
+        editingCategory = categoria
+        categoryName = categoria.nombre
+        categoryType = categoria.tipoEnum
+        categoryIcon = categoria.iconoEnum
+        showSheet = true
     }
 
     private func setupViewModel() async {

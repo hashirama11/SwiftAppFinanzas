@@ -186,6 +186,8 @@ struct BalanceView: View {
         return theme.colors.accentGreen
     }
 
+    @State private var chartCurrency: Moneda = .VES
+
     private func monthlyChartSection(vm: BalanceViewModel) -> some View {
         VStack(spacing: 12) {
             HStack {
@@ -201,20 +203,27 @@ struct BalanceView: View {
                 }
             }
 
+            Picker("Moneda", selection: $chartCurrency) {
+                Text("Bs.").tag(Moneda.VES)
+                Text("USD").tag(Moneda.USD)
+            }
+            .pickerStyle(.segmented)
+            .padding(.top, -4)
+
             if vm.state.monthlyFlows.isEmpty {
                 emptyChartView
             } else {
                 Chart(vm.state.monthlyFlows) { flow in
                     BarMark(
                         x: .value("Mes", flow.month),
-                        y: .value("Ingresos", flow.ingresos)
+                        y: .value("Ingresos", chartCurrency == .VES ? flow.ingresosVes : flow.ingresosUsd)
                     )
                     .foregroundStyle(theme.colors.accentGreen)
                     .cornerRadius(4)
 
                     BarMark(
                         x: .value("Mes", flow.month),
-                        y: .value("Gastos", flow.gastos)
+                        y: .value("Gastos", chartCurrency == .VES ? flow.gastosVes : flow.gastosUsd)
                     )
                     .foregroundStyle(theme.colors.accentRed)
                     .cornerRadius(4)
@@ -292,46 +301,91 @@ struct BalanceView: View {
     }
 
     private func monthlyDetailRow(flow: MonthlyFlow) -> some View {
-        HStack(spacing: 12) {
-            Text(flow.month)
-                .font(theme.typography.bodyLarge)
-                .fontWeight(.medium)
-                .foregroundColor(theme.colors.textPrimary)
-                .frame(width: 44, alignment: .leading)
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Text(flow.month)
+                    .font(theme.typography.bodyLarge)
+                    .fontWeight(.bold)
+                    .foregroundColor(theme.colors.primary)
+                    .frame(width: 44, alignment: .leading)
 
-            VStack(spacing: 4) {
-                GeometryReader { geometry in
-                    HStack(spacing: 0) {
-                        if flow.ingresos > 0 {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(theme.colors.accentGreen)
-                                .frame(width: ingresosBarWidth(total: geometry.size.width, flow: flow))
+                VStack(spacing: 4) {
+                    GeometryReader { geometry in
+                        HStack(spacing: 0) {
+                            if flow.ingresos > 0 {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(theme.colors.accentGreen)
+                                    .frame(width: ingresosBarWidth(total: geometry.size.width, flow: flow))
+                            }
+                            if flow.gastos > 0 {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(theme.colors.accentRed)
+                                    .frame(width: gastosBarWidth(total: geometry.size.width, flow: flow))
+                            }
+                            Spacer(minLength: 0)
                         }
-                        if flow.gastos > 0 {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(theme.colors.accentRed)
-                                .frame(width: gastosBarWidth(total: geometry.size.width, flow: flow))
-                        }
-                        Spacer(minLength: 0)
                     }
+                    .frame(height: 6)
                 }
-                .frame(height: 6)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("+\(Formatters.currency.string(from: NSNumber(value: flow.ingresos)) ?? "0.00")")
+                        .font(theme.typography.labelSmall)
+                        .foregroundColor(theme.colors.accentGreen)
+
+                    Text("-\(Formatters.currency.string(from: NSNumber(value: flow.gastos)) ?? "0.00")")
+                        .font(theme.typography.labelSmall)
+                        .foregroundColor(theme.colors.accentRed)
+                }
             }
 
-            Spacer()
+            HStack(spacing: 8) {
+                Spacer()
+                    .frame(width: 44)
 
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("+\(Formatters.currency.string(from: NSNumber(value: flow.ingresos)) ?? "0.00")")
-                    .font(theme.typography.labelSmall)
-                    .foregroundColor(theme.colors.accentGreen)
+                currencyDetailTag(
+                    label: "Bs.",
+                    ingresos: flow.ingresosVes,
+                    gastos: flow.gastosVes
+                )
 
-                Text("-\(Formatters.currency.string(from: NSNumber(value: flow.gastos)) ?? "0.00")")
-                    .font(theme.typography.labelSmall)
-                    .foregroundColor(theme.colors.accentRed)
+                currencyDetailTag(
+                    label: "USD",
+                    ingresos: flow.ingresosUsd,
+                    gastos: flow.gastosUsd
+                )
+
+                Spacer()
             }
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 16)
+    }
+
+    private func currencyDetailTag(label: String, ingresos: Double, gastos: Double) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(theme.colors.textSecondary)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(theme.colors.surfaceSecondary)
+                .clipShape(Capsule())
+
+            if ingresos > 0 {
+                Text("+\(Formatters.formatCompact(ingresos))")
+                    .font(.system(size: 9))
+                    .foregroundColor(theme.colors.accentGreen)
+            }
+
+            if gastos > 0 {
+                Text("-\(Formatters.formatCompact(gastos))")
+                    .font(.system(size: 9))
+                    .foregroundColor(theme.colors.accentRed)
+            }
+        }
     }
 
     private func ingresosBarWidth(total: CGFloat, flow: MonthlyFlow) -> CGFloat {

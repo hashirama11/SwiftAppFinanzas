@@ -5,4 +5,8 @@ struct MonthlyFlow: Identifiable, Hashable {
     let month: String
     let ingresos: Double
     let gastos: Double
+    let ingresosVes: Double
+    let ingresosUsd: Double
+    let gastosVes: Double
+    let gastosUsd: Double
 }

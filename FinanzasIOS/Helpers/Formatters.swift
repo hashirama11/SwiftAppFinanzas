@@ -37,4 +37,14 @@ enum Formatters {
         dateFormatter.dateFormat = "MMM"
         return dateFormatter.string(from: date).capitalized
     }
+
+    static func formatCompact(_ value: Double) -> String {
+        if abs(value) >= 1_000_000 {
+            return String(format: "%.1fM", value / 1_000_000)
+        } else if abs(value) >= 1_000 {
+            return String(format: "%.1fK", value / 1_000)
+        } else {
+            return String(format: "%.0f", value)
+        }
+    }
 }

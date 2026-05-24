@@ -42,10 +42,10 @@ private func computeState(from transacciones: [Transaccion]) async -> BalanceSta
         return BalanceState(isLoading: false)
     }
 
-    var monthlyData: [(key: Date, ingresos: Double, gastos: Double)] = []
+    var monthlyData: [(key: Date, ingresos: Double, gastos: Double, ingresosVes: Double, ingresosUsd: Double, gastosVes: Double, gastosUsd: Double)] = []
     for i in stride(from: 5, through: 0, by: -1) {
         if let targetMonth = calendar.date(byAdding: .month, value: -i, to: monthStart) {
-            monthlyData.append((key: targetMonth, ingresos: 0, gastos: 0))
+            monthlyData.append((key: targetMonth, ingresos: 0, gastos: 0, ingresosVes: 0, ingresosUsd: 0, gastosVes: 0, gastosUsd: 0))
         }
     }
 
@@ -65,8 +65,12 @@ private func computeState(from transacciones: [Transaccion]) async -> BalanceSta
         if let index = monthlyData.firstIndex(where: { calendar.isDate($0.key, equalTo: transDate, toGranularity: .month) }) {
             if tx.tipoEnum == .ingreso {
                 monthlyData[index].ingresos += monto
+                if tx.monedaEnum == .VES { monthlyData[index].ingresosVes += monto }
+                else { monthlyData[index].ingresosUsd += monto }
             } else {
                 monthlyData[index].gastos += monto
+                if tx.monedaEnum == .VES { monthlyData[index].gastosVes += monto }
+                else { monthlyData[index].gastosUsd += monto }
             }
         }
     }
@@ -84,7 +88,11 @@ private func computeState(from transacciones: [Transaccion]) async -> BalanceSta
         MonthlyFlow(
             month: Formatters.formatMonth($0.key),
             ingresos: $0.ingresos,
-            gastos: $0.gastos
+            gastos: $0.gastos,
+            ingresosVes: $0.ingresosVes,
+            ingresosUsd: $0.ingresosUsd,
+            gastosVes: $0.gastosVes,
+            gastosUsd: $0.gastosUsd
         )
     }
 

@@ -23,6 +23,7 @@ struct AllTransactionsView: View {
         .navigationTitle("Historial")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
+        .enableBackGesture()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: onBack) {
@@ -126,6 +127,13 @@ struct AllTransactionsView: View {
                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        Task { await vm.deleteTransaction(tx) }
+                    } label: {
+                        Label("Eliminar", systemImage: "trash")
+                    }
+                }
             }
         }
         .listStyle(.plain)

@@ -12,6 +12,7 @@ protocol FinanzasRepository: Sendable {
 
     func getAllCategorias() async throws -> [Categoria]
     func insertCategoria(_ categoria: Categoria) async throws
+    func updateCategoria(_ categoria: Categoria) async throws
     func deleteCategoria(_ categoria: Categoria) async throws
 
     func getUsuario() async throws -> Usuario?
@@ -73,6 +74,10 @@ final class FinanzasRepositoryImpl: FinanzasRepository {
 
     func insertCategoria(_ categoria: Categoria) async throws {
         modelContext.insert(categoria)
+        try modelContext.save()
+    }
+
+    func updateCategoria(_ categoria: Categoria) async throws {
         try modelContext.save()
     }
 

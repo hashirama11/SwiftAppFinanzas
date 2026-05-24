@@ -6,12 +6,14 @@ struct AppTabView: View {
     @State private var selectedTab: AppTab = .dashboard
     @State private var dashboardPath = NavigationPath()
     @State private var balancePath = NavigationPath()
+    @State private var notificationsPath = NavigationPath()
     @State private var profilePath = NavigationPath()
 
     var body: some View {
         TabView(selection: $selectedTab) {
             dashboardTab
             balanceTab
+            notificationsTab
             profileTab
         }
         .tint(theme.colors.primary)
@@ -58,6 +60,23 @@ struct AppTabView: View {
             Label(AppTab.balance.title, systemImage: AppTab.balance.systemImage)
         }
         .tag(AppTab.balance)
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+    }
+
+    @ViewBuilder
+    private var notificationsTab: some View {
+        NavigationStack(path: $notificationsPath) {
+            NotificationsView()
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: AppRoute.self) { route in
+                    destinationView(for: route, path: $notificationsPath)
+                }
+        }
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .tabItem {
+            Label(AppTab.notifications.title, systemImage: AppTab.notifications.systemImage)
+        }
+        .tag(AppTab.notifications)
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
     }
 
@@ -112,7 +131,7 @@ struct AppTabView: View {
                 onBack: { path.wrappedValue.removeLast() }
             )
 
-        case .dashboard, .balance, .profile:
+        case .dashboard, .balance, .notifications, .profile:
             EmptyView()
         }
     }

@@ -40,6 +40,14 @@ final class AllTransactionsViewModel {
         applyFilters()
     }
 
+    func deleteTransaction(_ transaction: TransactionWithDetails) async {
+        try? await repository.deleteTransaccion(by: transaction.transaccion.id)
+        await MainActor.run {
+            NotificationCenter.default.post(name: .transactionDidChange, object: nil)
+        }
+        await loadData()
+    }
+
     private func applyFilters() {
         var filtered = state.allTransactions
 

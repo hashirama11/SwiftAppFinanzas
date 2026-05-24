@@ -69,7 +69,6 @@ final class AddTransactionViewModel {
     func saveTransaction() async -> Bool {
         guard let amountValue = Double(state.amount.replacingOccurrences(of: ",", with: ".")),
               amountValue > 0,
-              !state.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               state.selectedCategory != nil else {
             return false
         }

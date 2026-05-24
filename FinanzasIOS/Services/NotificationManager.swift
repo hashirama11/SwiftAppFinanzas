@@ -10,6 +10,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     var isAuthorized: Bool = false
     var pendingCount: Int = 0
+    var pendingNotifications: [PendingNotification] = []
 
     private let center = UNUserNotificationCenter.current()
 
@@ -52,12 +53,15 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         content.sound = .default
         content.badge = NSNumber(value: pendingCount + 1)
 
-        if let categoria = transaccion.categoria {
-            content.userInfo = [
-                "transactionId": transaccion.id.uuidString,
-                "categoryIcon": categoria.iconoEnum.sfSymbol
-            ]
-        }
+        content.userInfo = [
+            "transactionId": transaccion.id.uuidString,
+            "monto": String(format: "%.2f", transaccion.monto),
+            "moneda": transaccion.monedaEnum.rawValue,
+            "tipo": transaccion.tipoEnum.rawValue,
+            "descripcion": transaccion.descripcion,
+            "categoria": transaccion.categoria?.nombre ?? "",
+            "fechaProgramada": ISO8601DateFormatter().string(from: fechaConcrecion)
+        ]
 
         let triggerDate = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute],
@@ -94,6 +98,41 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     func refreshPendingCount() async {
         let requests = await center.pendingNotificationRequests()
         pendingCount = requests.count
+
+        pendingNotifications = requests.compactMap { request in
+            let userInfo = request.content.userInfo
+            let transactionIdStr = userInfo["transactionId"] as? String
+            let transactionId = transactionIdStr.flatMap(UUID.init)
+            let montoStr = userInfo["monto"] as? String ?? "0.00"
+            let monto = Double(montoStr) ?? 0.0
+            let monedaStr = userInfo["moneda"] as? String ?? "VES"
+            let moneda = monedaStr == "USD" ? Moneda.USD : Moneda.VES
+            let tipoStr = userInfo["tipo"] as? String ?? ""
+            let tipo: TipoTransaccion = tipoStr == "INGRESO" ? .ingreso : .gasto
+            let descripcion = userInfo["descripcion"] as? String ?? "Sin descripción"
+            let categoria = userInfo["categoria"] as? String
+
+            var fechaProgramada = Date()
+            if let trigger = request.trigger as? UNCalendarNotificationTrigger,
+               let triggerDate = Calendar.current.date(from: trigger.dateComponents) {
+                fechaProgramada = triggerDate
+            } else if let fechaStr = userInfo["fechaProgramada"] as? String,
+                      let fecha = ISO8601DateFormatter().date(from: fechaStr) {
+                fechaProgramada = fecha
+            }
+
+            return PendingNotification(
+                id: request.identifier,
+                transactionId: transactionId,
+                titulo: request.content.title,
+                descripcion: descripcion,
+                monto: monto,
+                moneda: moneda,
+                tipo: tipo,
+                categoria: categoria,
+                fechaProgramada: fechaProgramada
+            )
+        }.sorted { $0.fechaProgramada < $1.fechaProgramada }
     }
 
     func openAppNotificationSettings() {

@@ -30,6 +30,15 @@ final class CategoryManagementViewModel {
         await loadCategories()
     }
 
+    func updateCategory(_ categoria: Categoria, name: String, type: TipoTransaccion, icon: IconosEstandar) async {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        categoria.nombre = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        categoria.tipoEnum = type
+        categoria.iconoEnum = icon
+        try? await repository.updateCategoria(categoria)
+        await loadCategories()
+    }
+
     func deleteCategory(_ categoria: Categoria) async {
         try? await repository.deleteCategoria(categoria)
         await loadCategories()
