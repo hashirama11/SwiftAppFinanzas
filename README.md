@@ -2,10 +2,6 @@
 
 Tu asistente personal para tomar el control de tus ingresos y gastos de una manera sencilla e intuitiva.
 
-<div align="center">
-  <img src="Assets/AppIcon.png" alt="Finanzas" width="120" />
-</div>
-
 ---
 
 ## Características
