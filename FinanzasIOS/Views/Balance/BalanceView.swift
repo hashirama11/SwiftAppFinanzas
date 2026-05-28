@@ -2,33 +2,100 @@ import SwiftUI
 import SwiftData
 import Charts
 
+private enum BalancePanel: String, CaseIterable {
+    case general
+    case presupuesto
+
+    var title: String {
+        switch self {
+        case .general: "Balance General"
+        case .presupuesto: "Presupuestos"
+        }
+    }
+}
+
 struct BalanceView: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.modelContext) private var modelContext
 
     @State private var viewModel: BalanceViewModel?
+    @State private var budgetVM: BudgetViewModel?
+    @State private var selectedPanel: BalancePanel = .general
+    var onArchivedMonths: (() -> Void)?
 
     var body: some View {
         Group {
-            if let vm = viewModel {
-                balanceContent(vm: vm)
+            if viewModel != nil {
+                balanceContent
             } else {
                 loadingView
             }
         }
         .background(theme.colors.background)
         .task {
-            await setupViewModel()
+            await setupViewModels()
         }
         .task {
             for await _ in NotificationCenter.default.notifications(named: .transactionDidChange) {
                 await viewModel?.loadData()
+                await budgetVM?.loadData()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .budgetDidChange)) { _ in
+            Task {
+                await budgetVM?.loadData()
             }
         }
     }
 
     @ViewBuilder
-    private func balanceContent(vm: BalanceViewModel) -> some View {
+    private var balanceContent: some View {
+        VStack(spacing: 0) {
+            panelSelector
+
+            if selectedPanel == .general, let vm = viewModel {
+                generalBalanceView(vm: vm)
+            } else if selectedPanel == .presupuesto, let bvm = budgetVM {
+                presupuestoBalanceView(bvm: bvm)
+            }
+        }
+    }
+
+    // MARK: - Panel Selector
+
+    private var panelSelector: some View {
+        HStack(spacing: 0) {
+            ForEach(BalancePanel.allCases, id: \.self) { panel in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        selectedPanel = panel
+                    }
+                } label: {
+                    Text(panel.title)
+                        .font(theme.typography.bodyMedium)
+                        .fontWeight(selectedPanel == panel ? .semibold : .regular)
+                        .foregroundColor(selectedPanel == panel ? .white : theme.colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: theme.shapes.medium)
+                                .fill(selectedPanel == panel ? theme.colors.primary : .clear)
+                        )
+                }
+            }
+        }
+        .padding(4)
+        .background(theme.colors.surfaceSecondary)
+        .cornerRadius(theme.shapes.medium)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+    }
+
+    // MARK: - General Balance View
+
+    @ViewBuilder
+    private func generalBalanceView(vm: BalanceViewModel) -> some View {
         ScrollView {
             VStack(spacing: 20) {
                 headerSection
@@ -36,11 +103,271 @@ struct BalanceView: View {
                 savingsRateCard(vm: vm)
                 monthlyChartSection(vm: vm)
                 monthlyDetailSection(vm: vm)
+                archivedMonthsButton
             }
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
+    }
+
+    // MARK: - Presupuesto Balance View
+
+    @ViewBuilder
+    private func presupuestoBalanceView(bvm: BudgetViewModel) -> some View {
+        let presupuestadas = bvm.state.categoriasConPresupuesto
+
+        ScrollView {
+            VStack(spacing: 20) {
+                monthSelector(vm: bvm)
+                tipoToggle(bvm: bvm)
+                currencyToggle(bvm: bvm)
+
+                if bvm.state.isLoading {
+                    ProgressView().tint(theme.colors.primary).scaleEffect(1.2).padding(.top, 40)
+                } else if presupuestadas.isEmpty {
+                    emptyPresupuestoState
+                } else {
+                    presupuestoSummaryCard(bvm: bvm)
+                    presupuestoList(items: presupuestadas, bvm: bvm)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
+        }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    // MARK: - Shared Components
+
+    private var emptyPresupuestoState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "chart.pie.fill")
+                .font(.system(size: 48))
+                .foregroundColor(theme.colors.textSecondary.opacity(0.3))
+            Text("Sin presupuestos este mes")
+                .font(theme.typography.bodyLarge)
+                .foregroundColor(theme.colors.textSecondary)
+            Text("Ve a la pestaña Presupuesto para definir tus metas")
+                .font(theme.typography.labelSmall)
+                .foregroundColor(theme.colors.textSecondary.opacity(0.7))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top, 40)
+    }
+
+    private func monthSelector(vm: BudgetViewModel) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                cambiarMes(vm: vm, delta: -1)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(theme.colors.primary)
+                    .frame(width: 36, height: 36)
+                    .background(theme.colors.surface)
+                    .cornerRadius(theme.shapes.small)
+            }
+            Spacer()
+            Text("\(vm.state.mesNombre) \(String(vm.state.anhoSeleccionado))")
+                .font(theme.typography.titleMedium)
+                .foregroundColor(theme.colors.textPrimary)
+            Spacer()
+            Button {
+                cambiarMes(vm: vm, delta: 1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(theme.colors.primary)
+                    .frame(width: 36, height: 36)
+                    .background(theme.colors.surface)
+                    .cornerRadius(theme.shapes.small)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(theme.colors.surface)
+        .cornerRadius(theme.shapes.large)
+        .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)
+    }
+
+    private func tipoToggle(bvm: BudgetViewModel) -> some View {
+        HStack(spacing: 0) {
+            ForEach(["gasto", "ingreso"], id: \.self) { tipo in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        bvm.cambiarTipo(tipo)
+                    }
+                } label: {
+                    Text(tipo == "gasto" ? "Gastos" : "Ingresos")
+                        .font(theme.typography.bodyMedium)
+                        .fontWeight(bvm.state.tipoFiltro == tipo ? .semibold : .regular)
+                        .foregroundColor(bvm.state.tipoFiltro == tipo ? .white : theme.colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: theme.shapes.medium)
+                                .fill(bvm.state.tipoFiltro == tipo ? theme.colors.primary : .clear)
+                        )
+                }
+            }
+        }
+        .padding(4)
+        .background(theme.colors.surfaceSecondary)
+        .cornerRadius(theme.shapes.medium)
+    }
+
+    private func currencyToggle(bvm: BudgetViewModel) -> some View {
+        HStack(spacing: 0) {
+            ForEach(["VES", "USD"], id: \.self) { moneda in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        bvm.cambiarMoneda(moneda)
+                    }
+                } label: {
+                    Text(moneda == "VES" ? "Bs." : "$")
+                        .font(theme.typography.bodyMedium)
+                        .fontWeight(bvm.state.monedaFiltro == moneda ? .semibold : .regular)
+                        .foregroundColor(bvm.state.monedaFiltro == moneda ? .white : theme.colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: theme.shapes.medium)
+                                .fill(bvm.state.monedaFiltro == moneda ? theme.colors.primary : .clear)
+                        )
+                }
+            }
+        }
+        .padding(4)
+        .background(theme.colors.surfaceSecondary)
+        .cornerRadius(theme.shapes.medium)
+    }
+
+    private func presupuestoSummaryCard(bvm: BudgetViewModel) -> some View {
+        BudgetSummaryCard(
+            totalPresupuestado: bvm.state.totalPresupuestado,
+            totalGastado: bvm.state.totalReal,
+            monedaSimbolo: bvm.state.monedaFiltro == "VES" ? "Bs." : "$",
+            porcentaje: bvm.state.porcentajeGlobal
+        )
+    }
+
+    private func presupuestoList(items: [CategoriaPresupuestada], bvm: BudgetViewModel) -> some View {
+        LazyVStack(spacing: 10) {
+            ForEach(items) { item in
+                presupuestoCard(item: item, bvm: bvm)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func presupuestoCard(item: CategoriaPresupuestada, bvm: BudgetViewModel) -> some View {
+        let simbolo = bvm.state.monedaFiltro == "VES" ? "Bs." : "$"
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: item.categoria.iconoEnum.sfSymbol)
+                    .font(.system(size: 16))
+                    .foregroundColor(item.categoria.tipoEnum == .ingreso ? theme.colors.accentGreen : theme.colors.accentRed)
+                    .frame(width: 30)
+
+                Text(item.categoria.nombre)
+                    .font(theme.typography.bodyLarge)
+                    .foregroundColor(theme.colors.textPrimary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(simbolo)\(Formatters.currency.string(from: NSNumber(value: item.gastoReal)) ?? "0,00")")
+                        .font(theme.typography.bodyMedium)
+                        .foregroundColor(theme.colors.textPrimary)
+                    Text("de \(simbolo)\(Formatters.currency.string(from: NSNumber(value: item.montoPresupuestado)) ?? "0,00")")
+                        .font(theme.typography.labelSmall)
+                        .foregroundColor(theme.colors.textSecondary)
+                }
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(theme.colors.surfaceSecondary)
+                        .frame(height: 8)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(barColor(pct: item.porcentaje, excedido: item.estaExcedido))
+                        .frame(width: max(CGFloat(min(item.porcentaje, 1.0)) * geo.size.width, item.porcentaje > 0 ? 4 : 0), height: 8)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: item.porcentaje)
+                }
+            }
+            .frame(height: 8)
+
+            HStack(spacing: 4) {
+                Image(systemName: item.estaExcedido ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                    .font(.system(size: 11))
+                Text(item.estaExcedido
+                    ? "Excedido por \(simbolo)\(Formatters.currency.string(from: NSNumber(value: abs(item.restante))) ?? "0,00")"
+                    : "\(Int(round(item.porcentaje * 100)))% · \(simbolo)\(Formatters.currency.string(from: NSNumber(value: item.restante)) ?? "0,00") restante"
+                )
+                .font(theme.typography.labelSmall)
+                .foregroundColor(item.estaExcedido ? theme.colors.accentRed : theme.colors.accentGreen)
+                Spacer()
+            }
+        }
+        .padding(14)
+        .background(theme.colors.surface)
+        .cornerRadius(theme.shapes.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: theme.shapes.medium)
+                .stroke(item.estaExcedido ? theme.colors.accentRed.opacity(0.2) : Color.clear, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)
+    }
+
+    private func barColor(pct: Double, excedido: Bool) -> Color {
+        if excedido { return theme.colors.accentRed }
+        if pct > 0.8 { return .orange }
+        return theme.colors.accentGreen
+    }
+
+    private func cambiarMes(vm: BudgetViewModel, delta: Int) {
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.year = vm.state.anhoSeleccionado
+        components.month = vm.state.mesSeleccionado
+        components.day = 1
+        guard let date = calendar.date(from: components),
+              let newDate = calendar.date(byAdding: .month, value: delta, to: date) else { return }
+        let newMonth = calendar.component(.month, from: newDate)
+        let newYear = calendar.component(.year, from: newDate)
+        vm.cambiarMes(a: newMonth, anho: newYear)
+    }
+
+    // MARK: - General Balance Sections
+
+    private var archivedMonthsButton: some View {
+        Button {
+            onArchivedMonths?()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "archivebox.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(theme.colors.primary)
+                Text("Meses Anteriores")
+                    .font(theme.typography.bodyLarge)
+                    .foregroundColor(theme.colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(theme.colors.textSecondary)
+            }
+            .padding(16)
+            .background(theme.colors.surface)
+            .cornerRadius(theme.shapes.medium)
+            .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 20)
     }
 
     private var headerSection: some View {
@@ -400,11 +727,18 @@ struct BalanceView: View {
         return total * (flow.gastos / maxFlow) * 0.48
     }
 
-    private func setupViewModel() async {
+    // MARK: - Setup & Loading
+
+    private func setupViewModels() async {
         let repo = FinanzasRepositoryImpl(modelContext: modelContext)
-        let vm = BalanceViewModel(repository: repo)
-        await vm.loadData()
-        viewModel = vm
+
+        let bvm = BalanceViewModel(repository: repo)
+        await bvm.loadData()
+        viewModel = bvm
+
+        let budgetVMInstance = BudgetViewModel(repository: repo)
+        await budgetVMInstance.loadData()
+        budgetVM = budgetVMInstance
     }
 
     private var loadingView: some View {

@@ -41,7 +41,7 @@ struct AllTransactionsView: View {
         }
         .task {
             for await _ in NotificationCenter.default.notifications(named: .transactionDidChange) {
-                await viewModel?.loadData()
+                await viewModel?.loadInitialData()
             }
         }
     }
@@ -53,7 +53,7 @@ struct AllTransactionsView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
 
-            if vm.state.filteredTransactions.isEmpty && !vm.state.isLoading {
+            if vm.state.transactions.isEmpty && !vm.state.isLoading {
                 emptyState
             } else {
                 transactionsList(vm: vm)
@@ -120,7 +120,7 @@ struct AllTransactionsView: View {
 
     private func transactionsList(vm: AllTransactionsViewModel) -> some View {
         List {
-            ForEach(vm.state.filteredTransactions) { tx in
+            ForEach(vm.state.transactions) { tx in
                 TransactionItem(transaction: tx) {
                     onTransactionClick(tx.transaccion.id)
                 }
@@ -133,6 +133,47 @@ struct AllTransactionsView: View {
                     } label: {
                         Label("Eliminar", systemImage: "trash")
                     }
+                }
+            }
+
+            if vm.state.hasMorePages || vm.state.isLoadingMore {
+                Section {
+                    HStack {
+                        Spacer()
+                        if vm.state.isLoadingMore {
+                            ProgressView()
+                                .tint(theme.colors.primary)
+                                .scaleEffect(0.9)
+                        } else {
+                            Button {
+                                Task { await vm.loadMore() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.down.circle")
+                                        .font(.system(size: 14))
+                                    Text("Cargar más")
+                                        .font(theme.typography.bodyMedium)
+                                }
+                                .foregroundColor(theme.colors.primary)
+                                .padding(.vertical, 8)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
+
+            if !vm.state.transactions.isEmpty {
+                Section {
+                    HStack {
+                        Spacer()
+                        Text("\(vm.state.currentOffset) de \(vm.state.totalCount) transacciones")
+                            .font(theme.typography.labelSmall)
+                            .foregroundColor(theme.colors.textSecondary)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
                 }
             }
         }
@@ -162,7 +203,7 @@ struct AllTransactionsView: View {
     private func setupViewModel() async {
         let repo = FinanzasRepositoryImpl(modelContext: modelContext)
         let vm = AllTransactionsViewModel(repository: repo)
-        await vm.loadData()
+        await vm.loadInitialData()
         viewModel = vm
     }
 

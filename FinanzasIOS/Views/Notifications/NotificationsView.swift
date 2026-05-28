@@ -4,6 +4,7 @@ struct NotificationsView: View {
     @Environment(\.appTheme) private var theme
 
     @State private var viewModel = NotificationsViewModel()
+    var onBack: (() -> Void)?
 
     var body: some View {
         Group {
@@ -14,6 +15,22 @@ struct NotificationsView: View {
             }
         }
         .background(theme.colors.background)
+        .navigationTitle("Alertas")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(onBack != nil)
+        .toolbar {
+            if let onBack = onBack {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onBack) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left").font(.body.weight(.semibold))
+                            Text("Atrás")
+                        }
+                        .foregroundColor(theme.colors.primary)
+                    }
+                }
+            }
+        }
         .task {
             await viewModel.loadData()
         }

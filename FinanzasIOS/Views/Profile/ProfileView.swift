@@ -7,6 +7,7 @@ struct ProfileView: View {
     @AppStorage("isDarkMode") private var isDarkMode: Bool = false
 
     let onCategoryManagementClick: () -> Void
+    var onNotificationsClick: (() -> Void)?
 
     @State private var viewModel: ProfileViewModel?
 
@@ -120,7 +121,7 @@ struct ProfileView: View {
 
     private var notificationsRow: some View {
         Button {
-            NotificationManager.shared.openAppNotificationSettings()
+            onNotificationsClick?()
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: "bell.fill")
@@ -132,7 +133,7 @@ struct ProfileView: View {
                     Text("Notificaciones")
                         .font(theme.typography.bodyLarge)
                         .foregroundColor(theme.colors.textPrimary)
-                    Text(NotificationManager.shared.isAuthorized ? "Activadas" : "Desactivadas")
+                    Text("Gestionar recordatorios")
                         .font(theme.typography.labelSmall)
                         .foregroundColor(theme.colors.textSecondary)
                 }

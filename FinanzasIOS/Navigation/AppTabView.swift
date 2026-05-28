@@ -6,14 +6,14 @@ struct AppTabView: View {
     @State private var selectedTab: AppTab = .dashboard
     @State private var dashboardPath = NavigationPath()
     @State private var balancePath = NavigationPath()
-    @State private var notificationsPath = NavigationPath()
+    @State private var budgetPath = NavigationPath()
     @State private var profilePath = NavigationPath()
 
     var body: some View {
         TabView(selection: $selectedTab) {
             dashboardTab
             balanceTab
-            notificationsTab
+            budgetTab
             profileTab
         }
         .tint(theme.colors.primary)
@@ -49,11 +49,15 @@ struct AppTabView: View {
     @ViewBuilder
     private var balanceTab: some View {
         NavigationStack(path: $balancePath) {
-            BalanceView()
-                .navigationBarTitleDisplayMode(.inline)
-                .navigationDestination(for: AppRoute.self) { route in
-                    destinationView(for: route, path: $balancePath)
+            BalanceView(
+                onArchivedMonths: {
+                    balancePath.append(AppRoute.archivedMonths)
                 }
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: AppRoute.self) { route in
+                destinationView(for: route, path: $balancePath)
+            }
         }
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .tabItem {
@@ -64,19 +68,26 @@ struct AppTabView: View {
     }
 
     @ViewBuilder
-    private var notificationsTab: some View {
-        NavigationStack(path: $notificationsPath) {
-            NotificationsView()
-                .navigationBarTitleDisplayMode(.inline)
-                .navigationDestination(for: AppRoute.self) { route in
-                    destinationView(for: route, path: $notificationsPath)
+    private var budgetTab: some View {
+        NavigationStack(path: $budgetPath) {
+            BudgetView(
+                onSetBudget: { categoriaId, mes, anho in
+                    budgetPath.append(AppRoute.setBudget(categoriaId: categoriaId, mes: mes, anho: anho))
+                },
+                onAddBudget: { mes, anho in
+                    budgetPath.append(AppRoute.budgetCategoryPicker(mes: mes, anho: anho))
                 }
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: AppRoute.self) { route in
+                destinationView(for: route, path: $budgetPath)
+            }
         }
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .tabItem {
-            Label(AppTab.notifications.title, systemImage: AppTab.notifications.systemImage)
+            Label(AppTab.budget.title, systemImage: AppTab.budget.systemImage)
         }
-        .tag(AppTab.notifications)
+        .tag(AppTab.budget)
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
     }
 
@@ -86,6 +97,9 @@ struct AppTabView: View {
             ProfileView(
                 onCategoryManagementClick: {
                     profilePath.append(AppRoute.categoryManagement)
+                },
+                onNotificationsClick: {
+                    profilePath.append(AppRoute.notifications)
                 }
             )
             .navigationBarTitleDisplayMode(.inline)
@@ -131,7 +145,35 @@ struct AppTabView: View {
                 onBack: { path.wrappedValue.removeLast() }
             )
 
-        case .dashboard, .balance, .notifications, .profile:
+        case .setBudget(let categoriaId, let mes, let anho):
+            SetBudgetView(
+                categoriaId: categoriaId,
+                mes: mes,
+                anho: anho,
+                onSaved: { path.wrappedValue.removeLast() }
+            )
+
+        case .budgetCategoryPicker(let mes, let anho):
+            BudgetCategoryPickerView(
+                mes: mes,
+                anho: anho,
+                onSelect: { categoriaId in
+                    path.wrappedValue.append(AppRoute.setBudget(categoriaId: categoriaId, mes: mes, anho: anho))
+                },
+                onBack: { path.wrappedValue.removeLast() }
+            )
+
+        case .notifications:
+            NotificationsView(
+                onBack: { path.wrappedValue.removeLast() }
+            )
+
+        case .archivedMonths:
+            ArchivedMonthsView(
+                onBack: { path.wrappedValue.removeLast() }
+            )
+
+        case .dashboard, .balance, .budget, .profile:
             EmptyView()
         }
     }

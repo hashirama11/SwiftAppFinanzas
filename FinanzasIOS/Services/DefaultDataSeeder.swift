@@ -20,13 +20,27 @@ struct DefaultDataSeeder {
         )
         context.insert(defaultUser)
 
-        let ingresoGeneral = Categoria(
-            nombre: "Ingreso General",
-            icono: .otros,
-            tipo: .ingreso,
-            esPersonalizada: false
-        )
-        context.insert(ingresoGeneral)
+        let categoriasIngreso: [(nombre: String, icono: IconosEstandar)] = [
+            ("Salario", .otros),
+            ("Freelance", .otros),
+            ("Inversiones", .interesesBancarios),
+            ("Alquiler", .alquiler),
+            ("Ventas", .otros),
+            ("Bonos y Comisiones", .otros),
+            ("Reembolsos", .otros),
+            ("Regalos", .otros),
+            ("Otros Ingresos", .otros),
+        ]
+
+        for (nombre, icono) in categoriasIngreso {
+            let categoria = Categoria(
+                nombre: nombre,
+                icono: icono,
+                tipo: .ingreso,
+                esPersonalizada: false
+            )
+            context.insert(categoria)
+        }
 
         for icono in IconosEstandar.allCases {
             let categoria = Categoria(

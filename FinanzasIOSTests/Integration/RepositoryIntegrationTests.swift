@@ -8,7 +8,7 @@ final class RepositoryIntegrationTests: XCTestCase {
 
     @MainActor
     override func setUp() async throws {
-        let schema = Schema([Usuario.self, Categoria.self, Transaccion.self])
+        let schema = Schema([Usuario.self, Categoria.self, Transaccion.self, PresupuestoCategoria.self, MesCerrado.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         modelContainer = try ModelContainer(for: schema, configurations: [config])
         sut = FinanzasRepositoryImpl(modelContext: modelContainer.mainContext)
@@ -131,7 +131,96 @@ final class RepositoryIntegrationTests: XCTestCase {
 
         let categorias = try await sut.getAllCategorias()
         XCTAssertGreaterThan(categorias.count, 10)
-        XCTAssertTrue(categorias.contains { $0.nombre == "Ingreso General" })
+        XCTAssertTrue(categorias.contains { $0.nombre == "Salario" })
         XCTAssertTrue(categorias.contains { $0.nombre == "Supermercado" })
+    }
+
+    @MainActor
+    func testUpsertPresupuesto_createsAndUpdates() async throws {
+        let cat = Categoria(nombre: "Comida", icono: .supermercado, tipo: .gasto)
+        try await sut.insertCategoria(cat)
+
+        let presupuesto = PresupuestoCategoria(
+            categoria: cat,
+            mes: 5,
+            anho: 2026,
+            monto: 300,
+            moneda: .VES,
+            esRecurrente: true
+        )
+        try await sut.upsertPresupuesto(presupuesto)
+
+        let all = try await sut.getPresupuestos(mes: 5, anho: 2026)
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.monto, 300)
+        XCTAssertTrue(all.first?.esRecurrente ?? false)
+    }
+
+    @MainActor
+    func testPresupuesto_filteredByMesAnho() async throws {
+        let cat = Categoria(nombre: "Comida", icono: .supermercado, tipo: .gasto)
+        try await sut.insertCategoria(cat)
+
+        let pMayo = PresupuestoCategoria(categoria: cat, mes: 5, anho: 2026, monto: 200, moneda: .VES)
+        let pJunio = PresupuestoCategoria(categoria: cat, mes: 6, anho: 2026, monto: 250, moneda: .VES)
+        try await sut.upsertPresupuesto(pMayo)
+        try await sut.upsertPresupuesto(pJunio)
+
+        let mayo = try await sut.getPresupuestos(mes: 5, anho: 2026)
+        let junio = try await sut.getPresupuestos(mes: 6, anho: 2026)
+        XCTAssertEqual(mayo.count, 1)
+        XCTAssertEqual(junio.count, 1)
+        XCTAssertEqual(mayo.first?.monto, 200)
+        XCTAssertEqual(junio.first?.monto, 250)
+    }
+
+    @MainActor
+    func testDeletePresupuesto_removesCorrectly() async throws {
+        let cat = Categoria(nombre: "Comida", icono: .supermercado, tipo: .gasto)
+        try await sut.insertCategoria(cat)
+
+        let p = PresupuestoCategoria(categoria: cat, mes: 5, anho: 2026, monto: 200, moneda: .VES)
+        try await sut.upsertPresupuesto(p)
+
+        try await sut.deletePresupuesto(p)
+        let all = try await sut.getPresupuestos(mes: 5, anho: 2026)
+        XCTAssertEqual(all.count, 0)
+    }
+
+    @MainActor
+    func testMesCerrado_archiveAndRetrieve() async throws {
+        let mes = MesCerrado(
+            mes: 4,
+            anho: 2026,
+            balanceVES: 500,
+            balanceUSD: 100,
+            ingresosTotalesVES: 1000,
+            ingresosTotalesUSD: 200,
+            gastosTotalesVES: 500,
+            gastosTotalesUSD: 100,
+            tasaAhorro: 0.5,
+            transaccionCount: 10
+        )
+        modelContainer.mainContext.insert(mes)
+        try modelContainer.mainContext.save()
+
+        let all = try await sut.getAllMesesCerrados()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.mes, 4)
+        XCTAssertEqual(all.first?.balanceVES, 500)
+    }
+
+    @MainActor
+    func testPaginacion_respectsLimitOffset() async throws {
+        for i in 0..<30 {
+            let tx = Transaccion(monto: Double(i), descripcion: "Tx \(i)", tipo: .gasto)
+            try await sut.insertTransaccion(tx)
+        }
+
+        let page1 = try await sut.getTransaccionesPaginadas(limit: 20, offset: 0, tipo: "gasto", filtroTexto: nil)
+        let page2 = try await sut.getTransaccionesPaginadas(limit: 20, offset: 20, tipo: "gasto", filtroTexto: nil)
+
+        XCTAssertEqual(page1.count, 20)
+        XCTAssertEqual(page2.count, 10)
     }
 }

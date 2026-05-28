@@ -55,4 +55,23 @@ enum TestFactory {
             categoria: categoria
         )
     }
+
+    static func makePresupuestoCategoria(
+        id: UUID = UUID(),
+        categoria: Categoria? = nil,
+        mes: Int = 5,
+        anho: Int = 2026,
+        monto: Double = 200,
+        moneda: Moneda = .VES,
+        esRecurrente: Bool = false
+    ) -> PresupuestoCategoria {
+        PresupuestoCategoria(
+            categoria: categoria,
+            mes: mes,
+            anho: anho,
+            monto: monto,
+            moneda: moneda,
+            esRecurrente: esRecurrente
+        )
+    }
 }

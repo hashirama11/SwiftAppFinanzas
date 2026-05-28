@@ -11,33 +11,72 @@ final class AllTransactionsViewModel {
         self.repository = repository
     }
 
-    func loadData() async {
-        guard let transacciones = try? await repository.getAllTransacciones() else {
-            state.isLoading = false
-            return
+    func loadInitialData() async {
+        state.isLoading = true
+        state.currentOffset = 0
+        state.hasMorePages = true
+
+        let tipoStr: String? = state.filterType?.rawValue
+        let filtro: String? = state.searchQuery.isEmpty ? nil : state.searchQuery
+
+        do {
+            let transacciones = try await repository.getTransaccionesPaginadas(
+                limit: state.pageSize,
+                offset: 0,
+                tipo: tipoStr,
+                filtroTexto: filtro
+            )
+            let count = try await repository.getTransaccionesCount(tipo: tipoStr)
+
+            state.transactions = transacciones.map {
+                TransactionWithDetails(transaccion: $0, categoria: $0.categoria)
+            }
+            state.totalCount = count
+            state.currentOffset = transacciones.count
+            state.hasMorePages = transacciones.count < count
+        } catch {
+            state.transactions = []
+            state.totalCount = 0
+            state.hasMorePages = false
         }
 
-        let allTransactions: [TransactionWithDetails] = transacciones.map { transaccion in
-            TransactionWithDetails(transaccion: transaccion, categoria: transaccion.categoria)
-        }
-
-        state.allTransactions = allTransactions
-        applyFilters()
         state.isLoading = false
+    }
+
+    func loadMore() async {
+        guard !state.isLoadingMore, state.hasMorePages else { return }
+        state.isLoadingMore = true
+
+        let tipoStr: String? = state.filterType?.rawValue
+        let filtro: String? = state.searchQuery.isEmpty ? nil : state.searchQuery
+
+        do {
+            let more = try await repository.getTransaccionesPaginadas(
+                limit: state.pageSize,
+                offset: state.currentOffset,
+                tipo: tipoStr,
+                filtroTexto: filtro
+            )
+
+            let nuevos = more.map {
+                TransactionWithDetails(transaccion: $0, categoria: $0.categoria)
+            }
+            state.transactions.append(contentsOf: nuevos)
+            state.currentOffset += more.count
+            state.hasMorePages = state.currentOffset < state.totalCount
+        } catch {}
+
+        state.isLoadingMore = false
     }
 
     func onSearchQueryChange(_ query: String) {
         state.searchQuery = query
-        applyFilters()
+        Task { await loadInitialData() }
     }
 
     func onFilterTypeChange(_ type: TipoTransaccion?) {
-        if state.filterType == type {
-            state.filterType = nil
-        } else {
-            state.filterType = type
-        }
-        applyFilters()
+        state.filterType = (state.filterType == type) ? nil : type
+        Task { await loadInitialData() }
     }
 
     func deleteTransaction(_ transaction: TransactionWithDetails) async {
@@ -45,24 +84,6 @@ final class AllTransactionsViewModel {
         await MainActor.run {
             NotificationCenter.default.post(name: .transactionDidChange, object: nil)
         }
-        await loadData()
-    }
-
-    private func applyFilters() {
-        var filtered = state.allTransactions
-
-        if !state.searchQuery.isEmpty {
-            let query = state.searchQuery.lowercased()
-            filtered = filtered.filter { tx in
-                tx.transaccion.descripcion.lowercased().contains(query) ||
-                (tx.categoria?.nombre.lowercased().contains(query) ?? false)
-            }
-        }
-
-        if let filterType = state.filterType {
-            filtered = filtered.filter { $0.transaccion.tipoEnum == filterType }
-        }
-
-        state.filteredTransactions = filtered
+        await loadInitialData()
     }
 }

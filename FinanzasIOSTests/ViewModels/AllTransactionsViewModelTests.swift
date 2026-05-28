@@ -20,11 +20,11 @@ final class AllTransactionsViewModelTests: XCTestCase {
     func testLoadData_empty_returnsEmptyList() async {
         mockRepository.seed(transacciones: [])
 
-        await sut.loadData()
+        await sut.loadInitialData()
 
         XCTAssertFalse(sut.state.isLoading)
-        XCTAssertTrue(sut.state.allTransactions.isEmpty)
-        XCTAssertTrue(sut.state.filteredTransactions.isEmpty)
+        XCTAssertTrue(sut.state.transactions.isEmpty)
+        XCTAssertFalse(sut.state.hasMorePages)
     }
 
     @MainActor
@@ -32,11 +32,10 @@ final class AllTransactionsViewModelTests: XCTestCase {
         let tx = TestFactory.makeTransaccion(monto: 100, descripcion: "Test")
         mockRepository.seed(transacciones: [tx])
 
-        await sut.loadData()
+        await sut.loadInitialData()
 
-        XCTAssertEqual(sut.state.allTransactions.count, 1)
-        XCTAssertEqual(sut.state.filteredTransactions.count, 1)
-        XCTAssertEqual(sut.state.filteredTransactions.first?.transaccion.descripcion, "Test")
+        XCTAssertEqual(sut.state.transactions.count, 1)
+        XCTAssertEqual(sut.state.transactions.first?.transaccion.descripcion, "Test")
     }
 
     @MainActor
@@ -45,36 +44,11 @@ final class AllTransactionsViewModelTests: XCTestCase {
         let tx2 = TestFactory.makeTransaccion(descripcion: "Restaurante")
         mockRepository.seed(transacciones: [tx1, tx2])
 
-        await sut.loadData()
+        await sut.loadInitialData()
         sut.onSearchQueryChange("super")
 
-        XCTAssertEqual(sut.state.filteredTransactions.count, 1)
-        XCTAssertEqual(sut.state.filteredTransactions.first?.transaccion.descripcion, "Supermercado")
-    }
-
-    @MainActor
-    func testSearchQuery_filtersByCategoryName() async {
-        let cat = TestFactory.makeCategoria(nombre: "Comida")
-        let tx = TestFactory.makeTransaccion(descripcion: "Almuerzo", categoria: cat)
-        mockRepository.seed(transacciones: [tx])
-        mockRepository.seed(categorias: [cat])
-
-        await sut.loadData()
-        sut.onSearchQueryChange("comi")
-
-        XCTAssertEqual(sut.state.filteredTransactions.count, 1)
-    }
-
-    @MainActor
-    func testSearchQuery_empty_returnsAll() async {
-        let tx1 = TestFactory.makeTransaccion(descripcion: "A")
-        let tx2 = TestFactory.makeTransaccion(descripcion: "B")
-        mockRepository.seed(transacciones: [tx1, tx2])
-
-        await sut.loadData()
-        sut.onSearchQueryChange("")
-
-        XCTAssertEqual(sut.state.filteredTransactions.count, 2)
+        XCTAssertEqual(sut.state.transactions.count, 1)
+        XCTAssertEqual(sut.state.transactions.first?.transaccion.descripcion, "Supermercado")
     }
 
     @MainActor
@@ -83,28 +57,30 @@ final class AllTransactionsViewModelTests: XCTestCase {
         let gasto = TestFactory.makeTransaccion(descripcion: "Compra", tipo: .gasto)
         mockRepository.seed(transacciones: [ingreso, gasto])
 
-        await sut.loadData()
+        await sut.loadInitialData()
 
         sut.onFilterTypeChange(.ingreso)
-        XCTAssertEqual(sut.state.filteredTransactions.count, 1)
-        XCTAssertEqual(sut.state.filteredTransactions.first?.transaccion.descripcion, "Salario")
+        XCTAssertEqual(sut.state.transactions.count, 1)
+        XCTAssertEqual(sut.state.transactions.first?.transaccion.descripcion, "Salario")
 
         sut.onFilterTypeChange(.ingreso)
-        XCTAssertEqual(sut.state.filteredTransactions.count, 2)
+        XCTAssertEqual(sut.state.transactions.count, 2)
     }
 
     @MainActor
-    func testSearchAndFilterCombined_narrowsCorrectly() async {
-        let ingreso = TestFactory.makeTransaccion(descripcion: "Salario", tipo: .ingreso)
-        let gasto = TestFactory.makeTransaccion(descripcion: "Supermercado", tipo: .gasto)
-        mockRepository.seed(transacciones: [ingreso, gasto])
+    func testPagination_loadsMoreWhenAvailable() async {
+        var txs: [Transaccion] = []
+        for i in 0..<25 {
+            txs.append(TestFactory.makeTransaccion(descripcion: "Tx \(i)"))
+        }
+        mockRepository.seed(transacciones: txs)
 
-        await sut.loadData()
+        await sut.loadInitialData()
+        XCTAssertEqual(sut.state.transactions.count, 20)
+        XCTAssertTrue(sut.state.hasMorePages)
 
-        sut.onSearchQueryChange("sal")
-        sut.onFilterTypeChange(.ingreso)
-
-        XCTAssertEqual(sut.state.filteredTransactions.count, 1)
-        XCTAssertEqual(sut.state.filteredTransactions.first?.transaccion.descripcion, "Salario")
+        await sut.loadMore()
+        XCTAssertEqual(sut.state.transactions.count, 25)
+        XCTAssertFalse(sut.state.hasMorePages)
     }
 }

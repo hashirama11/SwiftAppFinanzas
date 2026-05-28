@@ -133,7 +133,7 @@ enum IconosEstandar: String, Codable, CaseIterable, Hashable {
         case .gimnasio: "dumbbell.fill"
         case .vestimenta: "tshirt.fill"
         case .calzado: "shoe.fill"
-        case .accesorios: "watch.fill"
+        case .accesorios: "bag.fill"
         case .electrodomesticos: "tv.fill"
         case .muebles: "chair.fill"
         case .decoracion: "paintpalette.fill"

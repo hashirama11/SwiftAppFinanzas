@@ -8,12 +8,21 @@ struct FinanzasIOSApp: App {
     @AppStorage("isDarkMode") private var isDarkMode: Bool = false
     @State private var mainViewModel: MainViewModel?
 
+    private static let currentSchemaVersion = 6
+
     init() {
         let schema = Schema([
             Usuario.self,
             Categoria.self,
             Transaccion.self,
+            PresupuestoCategoria.self,
+            MesCerrado.self,
         ])
+
+        let storedVersion = UserDefaults.standard.integer(forKey: "schemaVersion")
+        if storedVersion < Self.currentSchemaVersion {
+            Self.deleteDefaultStore()
+        }
 
         let configuration = ModelConfiguration(
             schema: schema,
@@ -25,9 +34,28 @@ struct FinanzasIOSApp: App {
                 for: schema,
                 configurations: [configuration]
             )
+            UserDefaults.standard.set(Self.currentSchemaVersion, forKey: "schemaVersion")
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            Self.deleteDefaultStore()
+
+            do {
+                modelContainer = try ModelContainer(
+                    for: schema,
+                    configurations: [configuration]
+                )
+                UserDefaults.standard.set(Self.currentSchemaVersion, forKey: "schemaVersion")
+            } catch {
+                fatalError("Could not create ModelContainer: \(error)")
+            }
         }
+    }
+
+    private static func deleteDefaultStore() {
+        let storeURL = URL.applicationSupportDirectory
+            .appending(path: "default.store")
+        try? FileManager.default.removeItem(at: storeURL)
+        try? FileManager.default.removeItem(at: storeURL.appendingPathExtension("wal"))
+        try? FileManager.default.removeItem(at: storeURL.appendingPathExtension("shm"))
     }
 
     var body: some Scene {
@@ -58,5 +86,7 @@ struct FinanzasIOSApp: App {
         if granted {
             await NotificationManager.shared.refreshPendingCount()
         }
+
+        await MonthTransitionService.checkAndTransition(context: context)
     }
 }
